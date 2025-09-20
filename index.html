@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>約数判定アプリ</title>
+<title>約数を探そう</title>
 <style>
   :root{
     --bg:#f9fafb; --ink:#111; --muted:#6b7280;
@@ -392,7 +392,7 @@ function showResult(ok){
     r.style.color = "var(--ok)";
     f.textContent = `${n} ÷ ${d} = ${q}`;
   }else{
-    r.textContent = "Not 約数😢";
+    r.textContent = "約数ではない😢";
     r.style.color = "var(--ng)";
     f.textContent = `${n} ÷ ${d} = ${q} … あまり ${rem}`;
   }
