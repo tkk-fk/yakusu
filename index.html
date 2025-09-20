@@ -2,74 +2,158 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>約数判定アプリ</title>
 <style>
   :root{
     --bg:#f9fafb; --ink:#111; --muted:#6b7280;
     --dot:#60a5fa; --plate:#fff9db; --ok:#16a34a; --ng:#ef4444;
     --shadow: inset 0 0 8px rgba(0,0,0,.18);
-    --dur: 250ms; /* 動的にJSから上書き（各配布で調整） */
-  }
-  body{font-family:"Rounded Mplus 1c","Hiragino Maru Gothic ProN",system-ui,sans-serif;background:var(--bg);margin:20px;text-align:center;color:var(--ink);}
-  input,button{font-size:18px;padding:8px 14px;margin:6px;border-radius:12px;border:1px solid #d1d5db;background:#fff}
-  button:disabled{opacity:.5;pointer-events:none}
-  #buttons{margin:8px 0}
-  .numBtn{min-width:42px; transition:background-color .2s ease, color .2s ease, border-color .2s ease;}
-  .mark-ok{ background:#dcfce7; color:#065f46; border-color:#86efac; }
-  .mark-ng{ background:#fee2e2; color:#7f1d1d; border-color:#fca5a5; }
-  #dots{margin:10px 0;display:flex;flex-wrap:wrap;justify-content:center}
-  .dot, .flyer{
-    width:20px;height:20px;border-radius:50%;background:var(--dot);display:inline-block;margin:3px;
-    transition:opacity .25s ease;
-  }
-  .flyer{
-    position:fixed; z-index:9999;
-    box-shadow:0 2px 10px rgba(0,0,0,.15);
-    will-change:left, top;
-    transition:left var(--dur) ease, top var(--dur) ease;
-  }
-  .plateArea{display:flex;justify-content:center;flex-wrap:wrap;margin:12px 0}
-  .plate{
-    width:92px;height:92px;border-radius:50%;
-    background:var(--plate);border:2px solid #e5e7eb;box-shadow:var(--shadow);
-    margin:10px;display:flex;flex-wrap:wrap;justify-content:center;align-items:center;position:relative;
-  }
-  #result{font-size:22px;font-weight:700;margin-top:10px}
-  #formula{font-size:18px;color:#374151;margin-top:6px}
 
-  /* 目立つ「約数かな？」ボタン */
+    /* 可変サイズ（JSで上書き） */
+    --dot-size: 20px;          /* ドットとフライヤーの直径 */
+    --plate-size: 92px;        /* 皿の直径 */
+    --btn-min: 56px;           /* 数字ボタンの最小幅・高さ */
+    --gap: 10px;
+
+    /* 配布1個あたりの移動時間（JSが更新） */
+    --dur: 250ms;
+  }
+
+  *{ box-sizing: border-box; }
+  body{
+    font-family: "Rounded Mplus 1c","Hiragino Maru Gothic ProN",system-ui,sans-serif;
+    background:var(--bg); color:var(--ink);
+    margin:0;
+    padding:
+      calc(env(safe-area-inset-top) + 12px)
+      calc(env(safe-area-inset-right) + 12px)
+      calc(env(safe-area-inset-bottom) + 16px)
+      calc(env(safe-area-inset-left) + 12px);
+  }
+
+  h2{ margin: 0 0 8px; text-align: center; }
+  .topbar{
+    display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:10px;
+    margin: 6px auto 8px; max-width: 1100px;
+  }
+  input{
+    font-size:18px; padding:10px 14px; border-radius:12px; border:1px solid #d1d5db; background:#fff;
+    width: min(380px, 80vw);
+  }
+
+  /* 目立つ「約数かな？」ボタン（上部スティッキー） */
   #checkBtn{
-    font-size:20px;
-    padding:12px 20px;
+    font-size: clamp(18px, 2.4vw, 20px);
+    padding: 12px 20px;
+    min-height: 48px;
     border-radius:14px;
     background:linear-gradient(180deg,#22c55e,#16a34a);
-    color:#fff;
-    border:none;
+    color:#fff; border:none; cursor:pointer;
     box-shadow:0 8px 20px rgba(22,163,74,.35);
-    position:sticky;
-    top:8px; /* スクロールしても見失いにくい */
-    z-index:10;
+    position: sticky; top: 8px; z-index: 20;
     animation:pulse 1.6s ease-in-out infinite;
   }
-  #checkBtn:active{ transform:translateY(1px); }
+  #checkBtn:disabled{ opacity:.55; filter: grayscale(.2); }
   @keyframes pulse{
     0%,100%{ box-shadow:0 8px 20px rgba(22,163,74,.35); transform:scale(1); }
     50%{ box-shadow:0 12px 26px rgba(22,163,74,.5); transform:scale(1.02); }
+  }
+
+  /* エリア配置：ボタン / ドット / 皿 */
+  .wrap{
+    max-width: 1100px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-rows: auto auto 1fr auto auto;
+    gap: 10px;
+  }
+
+  /* 数字ボタン：自動グリッド（大きいタップ領域） */
+  #buttons{
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(var(--btn-min), 1fr));
+    gap: 8px;
+  }
+  .numBtn{
+    min-height: var(--btn-min);
+    min-width: var(--btn-min);
+    font-size: clamp(16px, 2.2vw, 18px);
+    border-radius: 14px;
+    border:1px solid #d1d5db;
+    background:#fff;
+    transition: background-color .2s ease, color .2s ease, border-color .2s ease, transform .05s ease;
+    touch-action: manipulation;
+  }
+  .numBtn:active{ transform: translateY(1px); }
+  .mark-ok{ background:#dcfce7; color:#065f46; border-color:#86efac; }
+  .mark-ng{ background:#fee2e2; color:#7f1d1d; border-color:#fca5a5; }
+
+  /* ドットエリア：内部スクロール */
+  #dots{
+    display:flex; flex-wrap:wrap; justify-content:center; gap: calc(var(--dot-size) * 0.2);
+    max-height: 28vh; overflow: auto; padding: 6px;
+    background:#fff; border:1px solid #e5e7eb; border-radius: 12px;
+  }
+  .dot, .flyer{
+    width: var(--dot-size);
+    height: var(--dot-size);
+    border-radius: 50%;
+    background: var(--dot);
+  }
+  .dot{ transition: opacity .25s ease; }
+
+  /* フライヤー：画面座標で移動（左/上） */
+  .flyer{
+    position: fixed; z-index: 9999;
+    box-shadow:0 2px 10px rgba(0,0,0,.15);
+    will-change: left, top;
+    transition: left var(--dur) ease, top var(--dur) ease;
+  }
+
+  /* 皿エリア：内部スクロール、折返し */
+  .plateArea{
+    display:flex; flex-wrap:wrap; justify-content:center; gap: 12px;
+    max-height: 36vh; overflow: auto; padding: 6px;
+    background:#fff; border:1px solid #e5e7eb; border-radius: 12px;
+  }
+  .plate{
+    width: var(--plate-size);
+    height: var(--plate-size);
+    border-radius: 50%;
+    background: var(--plate);
+    border:2px solid #e5e7eb;
+    box-shadow: var(--shadow);
+    display:flex; flex-wrap:wrap; justify-content:center; align-items:center;
+    position:relative;
+  }
+
+  /* 結果表示 */
+  #result{ font-size: clamp(20px, 2.6vw, 22px); font-weight:700; text-align:center; }
+  #formula{ font-size: clamp(16px, 2.2vw, 18px); color:#374151; text-align:center; }
+
+  /* 横幅が広いタブレット〜PCで余白を最適化 */
+  @media (min-width: 1024px){
+    #dots{ max-height: 30vh; }
+    .plateArea{ max-height: 38vh; }
   }
 </style>
 </head>
 <body>
   <h2>約数判定アプリ</h2>
-  <p>数字を入力してください</p>
-  <input type="number" id="numberInput" min="1" />
 
-  <div id="buttons"></div>
-  <div id="dots"></div>
-  <div class="plateArea" id="plates"></div>
-  <button id="checkBtn" onclick="checkDivisor()" style="display:none;">約数かな？</button>
-  <div id="result"></div>
-  <div id="formula"></div>
+  <div class="topbar">
+    <input type="number" id="numberInput" min="1" placeholder="数字を入力（例：100）" />
+    <button id="checkBtn" onclick="checkDivisor()" style="display:none;">約数かな？</button>
+  </div>
+
+  <div class="wrap">
+    <div id="buttons"></div>
+    <div id="dots"></div>
+    <div class="plateArea" id="plates"></div>
+    <div id="result"></div>
+    <div id="formula"></div>
+  </div>
 
 <script>
 let currentNumber = 0;
@@ -77,21 +161,37 @@ let selectedDivisor = 0;
 let distributing = false;
 let genTimer = null;
 
-const TOTAL_ANIM_MS = 3000; // ★ 総アニメーション時間＝常に3秒
+const TOTAL_ANIM_MS = 3000; // ★ いつでも総アニメ時間を3秒に
 
-function $(sel){ return document.querySelector(sel); }
-function $all(sel){ return Array.from(document.querySelectorAll(sel)); }
+const $ = sel => document.querySelector(sel);
+const $all = sel => Array.from(document.querySelectorAll(sel));
 
-// 元の位置のドットを再表示＋フライヤー掃除
+/* ===== レスポンシブ・スケール =====
+   数が大きいときはドット小さめ、皿も微調整。
+   また、タップ領域（ボタン）も十分な大きさを確保。
+*/
+function setResponsiveSizes(n){
+  let dot = 20, plate = 92, btn = 56;
+  if (n > 96){ dot = 14; plate = 88; btn = 56; }
+  else if (n > 64){ dot = 16; plate = 90; btn = 56; }
+  else if (n > 36){ dot = 18; plate = 92; btn = 56; }
+  // 余白（gap）はCSSの比率でOK
+
+  document.documentElement.style.setProperty('--dot-size', `${dot}px`);
+  document.documentElement.style.setProperty('--plate-size', `${plate}px`);
+  document.documentElement.style.setProperty('--btn-min', `${btn}px`);
+}
+
+/* 元の位置のドットを再表示＋飛行中のフライヤー掃除 */
 function resetDots(){
   $all("#dots .dot").forEach(d=>{ d.style.opacity = "1"; });
   $all(".flyer").forEach(f=>f.remove());
 }
 
-// 入力のたびに自動生成（デバウンス）
+/* 入力のたびに自動生成（デバウンス） */
 $("#numberInput").addEventListener("input", () => {
   if (genTimer) clearTimeout(genTimer);
-  genTimer = setTimeout(generate, 180);
+  genTimer = setTimeout(generate, 160);
 });
 
 function generate(){
@@ -109,6 +209,8 @@ function generate(){
   }
   currentNumber = n;
   selectedDivisor = 0;
+
+  setResponsiveSizes(n);
 
   // 初期化
   $("#buttons").innerHTML = "";
@@ -143,7 +245,6 @@ function selectDivisor(divisor){
   if(distributing) return;
   selectedDivisor = divisor;
 
-  // ドットを必ず元の場所で可視に
   resetDots();
 
   const area = $("#plates");
@@ -163,27 +264,23 @@ async function checkDivisor(){
 
   distributing = true;
 
-  // 操作ロック（数字ボタンは色分けのため有効のままでも良いが誤操作防止で無効化）
+  // 誤操作防止（数字ボタンは色付けのため無効化）
   $("#checkBtn").disabled = true;
   $all(".numBtn").forEach(b=>b.disabled=true);
 
   const plates = $all(".plate");
   const dots   = $all("#dots .dot");
   plates.forEach(p=>p.innerHTML=""); // 皿の中身クリア
-  resetDots(); // 念のため
+  resetDots();
 
   const n = dots.length;
-  if(n === 0){ finishAfter(false); return; }
+  if(n === 0){ finishAfter(); return; }
 
-  // ★ 総アニメーション3秒を保証するためのスケジューリング
-  // 1) 各ドットのスタート間隔（ずらし時間）
-  const stepDelay = TOTAL_ANIM_MS / n;  // 例: n=50 → 3000/50 = 60msごとに飛び始める
-  // 2) 実際の移動時間（短めにして余裕をもって到着）
-  const travelMs  = Math.max(120, stepDelay * 0.7); // とても多い時でも最低120ms確保
-  // CSS 変数を更新（flyerのtransitionに反映）
+  // ★ 総アニメーション3秒を保証
+  const stepDelay = TOTAL_ANIM_MS / n;           // ずらし間隔
+  const travelMs  = Math.max(120, stepDelay*0.7); // 実移動時間（最低120ms）
   document.documentElement.style.setProperty('--dur', `${travelMs}ms`);
 
-  // 3) すべてのフライトを並列に「遅延開始」し、最後が約3秒で終わるようにする
   const tasks = dots.map((from, i)=>{
     const plateIndex = i % selectedDivisor;
     const plate = plates[plateIndex];
@@ -194,7 +291,7 @@ async function checkDivisor(){
     });
   });
 
-  await Promise.all(tasks); // 全ドット着地を待つ（≒3秒）
+  await Promise.all(tasks); // 最後のドットが≒3秒で到着
 
   const isDivisor = (currentNumber % selectedDivisor === 0);
   showResult(isDivisor);
@@ -246,15 +343,17 @@ function flyDotOnce(fromEl, plateEl, travelMs){
     // 画面上を飛ぶフライヤー
     const flyer = document.createElement("div");
     flyer.className = "flyer";
-    flyer.style.left = (sx - 10) + "px";
-    flyer.style.top  = (sy - 10) + "px";
+    // フライヤーの大きさもドットに合わせる
+    flyer.style.width  = getComputedStyle(document.documentElement).getPropertyValue('--dot-size').trim();
+    flyer.style.height = flyer.style.width;
+    flyer.style.left = (sx - parseFloat(flyer.style.width)/2) + "px";
+    flyer.style.top  = (sy - parseFloat(flyer.style.height)/2) + "px";
     document.body.appendChild(flyer);
 
     await nextFrame();
 
     let done = false;
-    // フォールバックタイマー（transitionendが飛ばないケース対策）
-    const pad = 80;
+    const pad = 80; // フォールバック余裕
     const timer = setTimeout(finish, travelMs + pad);
 
     function finish(){
@@ -269,9 +368,10 @@ function flyDotOnce(fromEl, plateEl, travelMs){
 
     flyer.addEventListener("transitionend", finish, {once:true});
 
-    // ゴールへ（CSSの --dur が反映される）
-    flyer.style.left = (ex - 10) + "px";
-    flyer.style.top  = (ey - 10) + "px";
+    // 目的地へ
+    const half = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--dot-size'))/2;
+    flyer.style.left = (ex - half) + "px";
+    flyer.style.top  = (ey - half) + "px";
   });
 }
 
@@ -297,6 +397,10 @@ function showResult(ok){
     f.textContent = `${n} ÷ ${d} = ${q} … あまり ${rem}`;
   }
 }
+
+// 初期起動時、入力にフォーカス
+window.addEventListener('load', ()=>{ $("#numberInput")?.focus(); });
+
 </script>
 </body>
 </html>
