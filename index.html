@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>約数判定アプリ</title>
+<style>
+  :root{
+    --bg:#f9fafb; --ink:#111; --muted:#6b7280;
+    --dot:#60a5fa; --plate:#fff9db; --ok:#16a34a; --ng:#ef4444;
+    --shadow: inset 0 0 8px rgba(0,0,0,.18);
+    --dur: 250ms; /* 動的にJSから上書き（各配布で調整） */
+  }
+  body{font-family:"Rounded Mplus 1c","Hiragino Maru Gothic ProN",system-ui,sans-serif;background:var(--bg);margin:20px;text-align:center;color:var(--ink);}
+  input,button{font-size:18px;padding:8px 14px;margin:6px;border-radius:12px;border:1px solid #d1d5db;background:#fff}
+  button:disabled{opacity:.5;pointer-events:none}
+  #buttons{margin:8px 0}
+  .numBtn{min-width:42px; transition:background-color .2s ease, color .2s ease, border-color .2s ease;}
+  .mark-ok{ background:#dcfce7; color:#065f46; border-color:#86efac; }
+  .mark-ng{ background:#fee2e2; color:#7f1d1d; border-color:#fca5a5; }
+  #dots{margin:10px 0;display:flex;flex-wrap:wrap;justify-content:center}
+  .dot, .flyer{
+    width:20px;height:20px;border-radius:50%;background:var(--dot);display:inline-block;margin:3px;
+    transition:opacity .25s ease;
+  }
+  .flyer{
+    position:fixed; z-index:9999;
+    box-shadow:0 2px 10px rgba(0,0,0,.15);
+    will-change:left, top;
+    transition:left var(--dur) ease, top var(--dur) ease;
+  }
+  .plateArea{display:flex;justify-content:center;flex-wrap:wrap;margin:12px 0}
+  .plate{
+    width:92px;height:92px;border-radius:50%;
+    background:var(--plate);border:2px solid #e5e7eb;box-shadow:var(--shadow);
+    margin:10px;display:flex;flex-wrap:wrap;justify-content:center;align-items:center;position:relative;
+  }
+  #result{font-size:22px;font-weight:700;margin-top:10px}
+  #formula{font-size:18px;color:#374151;margin-top:6px}
+
+  /* 目立つ「約数かな？」ボタン */
+  #checkBtn{
+    font-size:20px;
+    padding:12px 20px;
+    border-radius:14px;
+    background:linear-gradient(180deg,#22c55e,#16a34a);
+    color:#fff;
+    border:none;
+    box-shadow:0 8px 20px rgba(22,163,74,.35);
+    position:sticky;
+    top:8px; /* スクロールしても見失いにくい */
+    z-index:10;
+    animation:pulse 1.6s ease-in-out infinite;
+  }
+  #checkBtn:active{ transform:translateY(1px); }
+  @keyframes pulse{
+    0%,100%{ box-shadow:0 8px 20px rgba(22,163,74,.35); transform:scale(1); }
+    50%{ box-shadow:0 12px 26px rgba(22,163,74,.5); transform:scale(1.02); }
+  }
+</style>
+</head>
+<body>
+  <h2>約数判定アプリ</h2>
+  <p>数字を入力してください</p>
+  <input type="number" id="numberInput" min="1" />
+
+  <div id="buttons"></div>
+  <div id="dots"></div>
+  <div class="plateArea" id="plates"></div>
+  <button id="checkBtn" onclick="checkDivisor()" style="display:none;">約数かな？</button>
+  <div id="result"></div>
+  <div id="formula"></div>
+
+<script>
+let currentNumber = 0;
+let selectedDivisor = 0;
+let distributing = false;
+let genTimer = null;
+
+const TOTAL_ANIM_MS = 3000; // ★ 総アニメーション時間＝常に3秒
+
+function $(sel){ return document.querySelector(sel); }
+function $all(sel){ return Array.from(document.querySelectorAll(sel)); }
+
+// 元の位置のドットを再表示＋フライヤー掃除
+function resetDots(){
+  $all("#dots .dot").forEach(d=>{ d.style.opacity = "1"; });
+  $all(".flyer").forEach(f=>f.remove());
+}
+
+// 入力のたびに自動生成（デバウンス）
+$("#numberInput").addEventListener("input", () => {
+  if (genTimer) clearTimeout(genTimer);
+  genTimer = setTimeout(generate, 180);
+});
+
+function generate(){
+  if(distributing) return; // 配布中は生成しない
+  const n = parseInt($("#numberInput").value);
+  if(!n || n<1) {
+    // クリア
+    $("#buttons").innerHTML = "";
+    $("#dots").innerHTML = "";
+    $("#plates").innerHTML = "";
+    $("#result").textContent = "";
+    $("#formula").textContent = "";
+    $("#checkBtn").style.display = "none";
+    return;
+  }
+  currentNumber = n;
+  selectedDivisor = 0;
+
+  // 初期化
+  $("#buttons").innerHTML = "";
+  $("#dots").innerHTML = "";
+  $("#plates").innerHTML = "";
+  $("#result").textContent = "";
+  $("#formula").textContent = "";
+  $("#checkBtn").style.display = "none";
+  resetDots();
+
+  // ドット生成
+  const dotsWrap = $("#dots");
+  for(let i=0;i<n;i++){
+    const d = document.createElement("div");
+    d.className = "dot";
+    dotsWrap.appendChild(d);
+  }
+
+  // 1〜n ボタン生成（data-vで値を保持）
+  const btnWrap = $("#buttons");
+  for(let i=1;i<=n;i++){
+    const btn = document.createElement("button");
+    btn.className = "numBtn";
+    btn.textContent = i;
+    btn.dataset.v = String(i);
+    btn.onclick = () => selectDivisor(i);
+    btnWrap.appendChild(btn);
+  }
+}
+
+function selectDivisor(divisor){
+  if(distributing) return;
+  selectedDivisor = divisor;
+
+  // ドットを必ず元の場所で可視に
+  resetDots();
+
+  const area = $("#plates");
+  area.innerHTML = "";
+  for(let i=0;i<divisor;i++){
+    const p = document.createElement("div");
+    p.className = "plate";
+    area.appendChild(p);
+  }
+  $("#checkBtn").style.display = "inline-block";
+  $("#result").textContent = "";
+  $("#formula").textContent = "";
+}
+
+async function checkDivisor(){
+  if(selectedDivisor===0 || distributing) return;
+
+  distributing = true;
+
+  // 操作ロック（数字ボタンは色分けのため有効のままでも良いが誤操作防止で無効化）
+  $("#checkBtn").disabled = true;
+  $all(".numBtn").forEach(b=>b.disabled=true);
+
+  const plates = $all(".plate");
+  const dots   = $all("#dots .dot");
+  plates.forEach(p=>p.innerHTML=""); // 皿の中身クリア
+  resetDots(); // 念のため
+
+  const n = dots.length;
+  if(n === 0){ finishAfter(false); return; }
+
+  // ★ 総アニメーション3秒を保証するためのスケジューリング
+  // 1) 各ドットのスタート間隔（ずらし時間）
+  const stepDelay = TOTAL_ANIM_MS / n;  // 例: n=50 → 3000/50 = 60msごとに飛び始める
+  // 2) 実際の移動時間（短めにして余裕をもって到着）
+  const travelMs  = Math.max(120, stepDelay * 0.7); // とても多い時でも最低120ms確保
+  // CSS 変数を更新（flyerのtransitionに反映）
+  document.documentElement.style.setProperty('--dur', `${travelMs}ms`);
+
+  // 3) すべてのフライトを並列に「遅延開始」し、最後が約3秒で終わるようにする
+  const tasks = dots.map((from, i)=>{
+    const plateIndex = i % selectedDivisor;
+    const plate = plates[plateIndex];
+    return new Promise(res=>{
+      setTimeout(()=>{
+        flyDotOnce(from, plate, travelMs).then(res);
+      }, Math.round(i * stepDelay));
+    });
+  });
+
+  await Promise.all(tasks); // 全ドット着地を待つ（≒3秒）
+
+  const isDivisor = (currentNumber % selectedDivisor === 0);
+  showResult(isDivisor);
+
+  // 数字ボタンを色付け
+  const targetBtn = document.querySelector(`#buttons .numBtn[data-v="${selectedDivisor}"]`);
+  if (targetBtn){
+    targetBtn.classList.remove("mark-ok","mark-ng");
+    targetBtn.classList.add(isDivisor ? "mark-ok" : "mark-ng");
+  }
+
+  finishAfter();
+}
+
+function finishAfter(){
+  $("#checkBtn").disabled = false;
+  $all(".numBtn").forEach(b=>b.disabled=false);
+  distributing = false;
+}
+
+/** 単一ドットを from → plate へ飛ばす（確実にresolve） */
+function flyDotOnce(fromEl, plateEl, travelMs){
+  return new Promise(async resolve=>{
+    await nextFrame();
+
+    // スタート中心座標
+    const s = fromEl.getBoundingClientRect();
+    const sx = s.left + s.width/2;
+    const sy = s.top  + s.height/2;
+
+    // 着地用ドット（最終配置）
+    const landing = document.createElement("div");
+    landing.className = "dot";
+    landing.style.opacity = "0";
+    plateEl.appendChild(landing);
+
+    await nextFrame(); // DOM反映を待つ
+    const e = landing.getBoundingClientRect();
+    const ex = e.left + e.width/2;
+    const ey = e.top  + e.height/2;
+
+    // 同位置なら即完了
+    if (Math.abs(ex - sx) < 0.5 && Math.abs(ey - sy) < 0.5){
+      landing.style.opacity = "1";
+      fromEl.style.opacity = "0";
+      return resolve();
+    }
+
+    // 画面上を飛ぶフライヤー
+    const flyer = document.createElement("div");
+    flyer.className = "flyer";
+    flyer.style.left = (sx - 10) + "px";
+    flyer.style.top  = (sy - 10) + "px";
+    document.body.appendChild(flyer);
+
+    await nextFrame();
+
+    let done = false;
+    // フォールバックタイマー（transitionendが飛ばないケース対策）
+    const pad = 80;
+    const timer = setTimeout(finish, travelMs + pad);
+
+    function finish(){
+      if(done) return;
+      done = true;
+      clearTimeout(timer);
+      landing.style.opacity = "1"; // 着地表示
+      flyer.remove();
+      fromEl.style.opacity = "0";  // 元のドットを隠す
+      resolve();
+    }
+
+    flyer.addEventListener("transitionend", finish, {once:true});
+
+    // ゴールへ（CSSの --dur が反映される）
+    flyer.style.left = (ex - 10) + "px";
+    flyer.style.top  = (ey - 10) + "px";
+  });
+}
+
+function nextFrame(){
+  return new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+}
+
+function showResult(ok){
+  const r = $("#result");
+  const f = $("#formula");
+  const n = currentNumber;
+  const d = selectedDivisor;
+  const q = Math.floor(n / d);
+  const rem = n % d;
+
+  if(ok){
+    r.textContent = "約数😀";
+    r.style.color = "var(--ok)";
+    f.textContent = `${n} ÷ ${d} = ${q}`;
+  }else{
+    r.textContent = "Not 約数😢";
+    r.style.color = "var(--ng)";
+    f.textContent = `${n} ÷ ${d} = ${q} … あまり ${rem}`;
+  }
+}
+</script>
+</body>
+</html>
